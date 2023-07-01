@@ -1,0 +1,3 @@
+nodes = []
+password = ""
+node = "redis://default:@localhost:6379"
