@@ -1,7 +1,7 @@
 use crate::cmd::RedisClient;
+use redis::aio::ConnectionManager;
 use serde::Deserialize;
 use std::fs::read_to_string;
-use redis::aio::ConnectionManager;
 
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct RedisDB {
@@ -11,8 +11,9 @@ pub struct RedisDB {
 }
 
 pub fn load_redis_config(filename: &str) -> RedisDB {
-    let content = read_to_string(&filename).expect("read redis.toml error");
-    let redis_db: RedisDB = toml::from_str(&content).expect("redis config init err");
+    let content = read_to_string(&filename).expect(&format!("read {} error", filename));
+    let redis_db: RedisDB =
+        toml::from_str(&content).expect(&format!("{} config init err", filename));
     redis_db
 }
 

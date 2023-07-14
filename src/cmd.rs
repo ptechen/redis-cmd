@@ -1,9 +1,9 @@
+use redis::aio::ConnectionManager;
 #[cfg(feature = "cluster")]
 use redis::cluster::ClusterClient;
 use redis::streams::StreamReadOptions;
-use redis::{from_redis_value, ToRedisArgs, Value, AsyncCommands};
+use redis::{from_redis_value, AsyncCommands, ToRedisArgs, Value};
 use std::fmt::{Debug, Formatter};
-use redis::aio::ConnectionManager;
 
 #[derive(Clone)]
 pub struct RedisClient {
@@ -21,7 +21,10 @@ impl Debug for RedisClient {
 
 impl RedisClient {
     #[tracing::instrument]
-    pub async fn get<K: ToRedisArgs + Debug + Send + Sync>(&mut self, key: K) -> redis::RedisResult<String> {
+    pub async fn get<K: ToRedisArgs + Debug + Send + Sync>(
+        &mut self,
+        key: K,
+    ) -> redis::RedisResult<String> {
         #[cfg(feature = "cluster")]
         let data = self.client.get_connection()?.get(key)?;
 
@@ -31,7 +34,23 @@ impl RedisClient {
     }
 
     #[tracing::instrument]
-    pub async fn exists<K: ToRedisArgs + Debug + Send + Sync>(&mut self, key: K) -> redis::RedisResult<u8> {
+    pub async fn mget<K: ToRedisArgs + Debug + Send + Sync>(
+        &mut self,
+        key: K,
+    ) -> redis::RedisResult<Vec<String>> {
+        #[cfg(feature = "cluster")]
+        let data = self.client.get_connection()?.mget(key)?;
+
+        #[cfg(feature = "single")]
+        let data = self.client.mget(key).await?;
+        Ok(data)
+    }
+
+    #[tracing::instrument]
+    pub async fn exists<K: ToRedisArgs + Debug + Send + Sync>(
+        &mut self,
+        key: K,
+    ) -> redis::RedisResult<u8> {
         #[cfg(feature = "cluster")]
         let data = self.client.get_connection()?.exists(key)?;
 
@@ -50,7 +69,7 @@ impl RedisClient {
         let ok = self.client.get_connection()?.set(key, value)?;
 
         #[cfg(feature = "single")]
-        let ok =self.client.set(key, value).await?;
+        let ok = self.client.set(key, value).await?;
         Ok(ok)
     }
 
@@ -64,22 +83,29 @@ impl RedisClient {
         let ok = self.client.get_connection()?.expire(key, expire)?;
 
         #[cfg(feature = "single")]
-        let ok =self.client.expire(key, expire).await?;
+        let ok = self.client.expire(key, expire).await?;
         Ok(ok)
     }
 
     #[tracing::instrument]
-    pub async fn del<K: ToRedisArgs + Debug + Send + Sync>(&mut self, key: K) -> redis::RedisResult<u8> {
+    pub async fn del<K: ToRedisArgs + Debug + Send + Sync>(
+        &mut self,
+        key: K,
+    ) -> redis::RedisResult<u8> {
         #[cfg(feature = "cluster")]
         let ok = self.client.get_connection()?.del(key)?;
 
         #[cfg(feature = "single")]
-        let ok =self.client.del(key).await?;
+        let ok = self.client.del(key).await?;
         Ok(ok)
     }
 
     #[tracing::instrument]
-    pub async fn xadd<K: ToRedisArgs + Debug + Send + Sync, F: ToRedisArgs + Debug + Send + Sync, V: ToRedisArgs + Debug + Send + Sync>(
+    pub async fn xadd<
+        K: ToRedisArgs + Debug + Send + Sync,
+        F: ToRedisArgs + Debug + Send + Sync,
+        V: ToRedisArgs + Debug + Send + Sync,
+    >(
         &mut self,
         key: K,
         items: &[(F, V)],
@@ -88,13 +114,16 @@ impl RedisClient {
         let ok = self.client.get_connection()?.xadd(key, "*", items)?;
 
         #[cfg(feature = "single")]
-        let ok =self.client.xadd(key, "*", items).await?;
+        let ok = self.client.xadd(key, "*", items).await?;
         Ok(ok)
     }
 
     /// return OK
     #[tracing::instrument]
-    pub async fn xgroup_create<K: ToRedisArgs + Debug + Send + Sync, G: ToRedisArgs + Debug + Send + Sync>(
+    pub async fn xgroup_create<
+        K: ToRedisArgs + Debug + Send + Sync,
+        G: ToRedisArgs + Debug + Send + Sync,
+    >(
         &mut self,
         key: K,
         group: G,
@@ -103,15 +132,12 @@ impl RedisClient {
 
         if !ok {
             #[cfg(feature = "cluster")]
-            self
-                .client
+            self.client
                 .get_connection()?
                 .xgroup_create_mkstream(key, group, 0)?;
 
             #[cfg(feature = "single")]
             self.client.xgroup_create_mkstream(key, group, 0).await?;
-
-
         }
         Ok(())
     }
@@ -143,7 +169,10 @@ impl RedisClient {
     }
 
     #[tracing::instrument]
-    pub async fn xinfo_groups<K: ToRedisArgs + Debug + Send + Sync>(&mut self, key: K) -> redis::RedisResult<Value> {
+    pub async fn xinfo_groups<K: ToRedisArgs + Debug + Send + Sync>(
+        &mut self,
+        key: K,
+    ) -> redis::RedisResult<Value> {
         #[cfg(feature = "cluster")]
         let v = self.client.get_connection()?.xinfo_groups(key)?;
 
@@ -153,7 +182,10 @@ impl RedisClient {
     }
 
     #[tracing::instrument]
-    pub async fn is_exist_group_name<K: ToRedisArgs + Debug + Send + Sync, G: ToRedisArgs + Debug + Send + Sync>(
+    pub async fn is_exist_group_name<
+        K: ToRedisArgs + Debug + Send + Sync,
+        G: ToRedisArgs + Debug + Send + Sync,
+    >(
         &mut self,
         key: K,
         group: G,
@@ -173,7 +205,10 @@ impl RedisClient {
     }
 
     #[tracing::instrument]
-    pub async fn xinfo_consumers<K: ToRedisArgs + Debug + Send + Sync, G: ToRedisArgs + Debug + Send + Sync>(
+    pub async fn xinfo_consumers<
+        K: ToRedisArgs + Debug + Send + Sync,
+        G: ToRedisArgs + Debug + Send + Sync,
+    >(
         &mut self,
         key: K,
         group: G,
@@ -217,19 +252,18 @@ impl RedisClient {
         )?;
 
         #[cfg(feature = "single")]
-        let v = self.client.xclaim_options(
-            key,
-            group,
-            consumer,
-            min_idle_time,
-            &ids,
-            opts,
-        ).await?;
+        let v = self
+            .client
+            .xclaim_options(key, group, consumer, min_idle_time, &ids, opts)
+            .await?;
         Ok(v)
     }
 
     #[tracing::instrument]
-    pub async fn xpending_one<K: ToRedisArgs + Debug + Send + Sync, G: ToRedisArgs + Debug + Send + Sync>(
+    pub async fn xpending_one<
+        K: ToRedisArgs + Debug + Send + Sync,
+        G: ToRedisArgs + Debug + Send + Sync,
+    >(
         &mut self,
         key: K,
         group: G,
@@ -241,9 +275,7 @@ impl RedisClient {
             .xpending_count(key, group, "-", "+", 1)?;
 
         #[cfg(feature = "single")]
-        let d: Value = self
-            .client
-            .xpending_count(key, group, "-", "+", 1).await?;
+        let d: Value = self.client.xpending_count(key, group, "-", "+", 1).await?;
         Ok(d)
     }
 
@@ -262,7 +294,11 @@ impl RedisClient {
     }
 
     #[tracing::instrument]
-    pub async fn xack<K: ToRedisArgs + Debug + Send + Sync, G: ToRedisArgs + Debug + Send + Sync, I: ToRedisArgs + Debug + Send + Sync>(
+    pub async fn xack<
+        K: ToRedisArgs + Debug + Send + Sync,
+        G: ToRedisArgs + Debug + Send + Sync,
+        I: ToRedisArgs + Debug + Send + Sync,
+    >(
         &mut self,
         key: K,
         group: G,
@@ -298,7 +334,10 @@ impl RedisClient {
 
     ///
     #[tracing::instrument]
-    pub async fn xdel<K: ToRedisArgs + Debug + Send + Sync, I: ToRedisArgs + Debug + Send + Sync>(
+    pub async fn xdel<
+        K: ToRedisArgs + Debug + Send + Sync,
+        I: ToRedisArgs + Debug + Send + Sync,
+    >(
         &mut self,
         key: K,
         ids: &Vec<I>,

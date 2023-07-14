@@ -1,6 +1,6 @@
 [package]
 name = "redis-cmd"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "An async Redis client for Rust built on redis crate."
 readme = "README.md"
